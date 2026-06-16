@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Triarchy — A Strategy Duel</title>
+<style>
+  :root {
+    --bg: #0e1320;
+    --panel: #18203250;
+    --panel-solid: #161d2e;
+    --you: #3aa6ff;
+    --enemy: #ff5d5d;
+    --gold: #ffce5c;
+    --eco: #4fd18b;
+    --tech: #b388ff;
+    --ratk: #ff7a7a;
+    --rdef: #62b8ff;
+    --mil: #ff9d4d;
+    --text: #e6ecf5;
+    --muted: #8a96ad;
+    --line: #27324a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: radial-gradient(1200px 700px at 50% -10%, #1a2540, var(--bg));
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 16px 60px; }
+  header { text-align: center; margin-bottom: 14px; }
+  h1 {
+    margin: 0; font-size: 30px; letter-spacing: 3px; font-weight: 800;
+    background: linear-gradient(90deg, var(--you), var(--tech), var(--enemy));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .tagline { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+  .turnbar {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    margin: 14px 0; font-size: 15px;
+  }
+  .turnchip {
+    padding: 6px 16px; border-radius: 999px; font-weight: 700; letter-spacing: 1px;
+    border: 1px solid var(--line); background: var(--panel-solid);
+  }
+  .turnchip.you { color: var(--you); box-shadow: 0 0 0 2px #3aa6ff33; }
+  .turnchip.enemy { color: var(--enemy); box-shadow: 0 0 0 2px #ff5d5d33; }
+  .turncount { color: var(--muted); font-size: 13px; }
+
+  .board { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .board { grid-template-columns: 1fr; } }
+
+  .player {
+    background: var(--panel-solid);
+    border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px;
+    position: relative; overflow: hidden;
+  }
+  .player.you { border-top: 3px solid var(--you); }
+  .player.enemy { border-top: 3px solid var(--enemy); }
+  .player.active { box-shadow: 0 0 0 2px currentColor inset; }
+  .player.you.active { color: var(--you); }
+  .player.enemy.active { color: var(--enemy); }
+
+  .pname { font-size: 16px; font-weight: 800; letter-spacing: 1px; margin-bottom: 10px; }
+  .you .pname { color: var(--you); }
+  .enemy .pname { color: var(--enemy); }
+
+  .hpbar { height: 22px; background: #0c1120; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); position: relative; }
+  .hpfill { height: 100%; transition: width .35s ease; }
+  .you .hpfill { background: linear-gradient(90deg, #2c7fd6, var(--you)); }
+  .enemy .hpfill { background: linear-gradient(90deg, #d63c3c, var(--enemy)); }
+  .hptext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000a; }
+
+  .scene {
+    margin-top: 12px; height: 150px; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line);
+    background: linear-gradient(#7ec3f0 0%, #c7e9fb 57%, #78ba56 57%, #4c8a37 100%);
+  }
+  .scene svg { display: block; width: 100%; height: 100%; }
+  .scene .trp, .scene .castle { transform-box: fill-box; transform-origin: center bottom; }
+  .scene .trp.new { animation: troopRise .45s cubic-bezier(.2,1.4,.5,1) both; }
+  .scene .castle.grow { animation: baseGrow .5s ease both; }
+  @keyframes troopRise { 0% { transform: translateY(10px) scale(.2); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+  @keyframes baseGrow { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
+  .scene .smoke { animation: smokeDrift 3.5s ease-in-out infinite; }
+  @keyframes smokeDrift { 0%, 100% { opacity: .8; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .stat { background: #0f1626; border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; text-align: center; }
+  .stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .stat .val { font-size: 20px; font-weight: 800; margin-top: 2px; }
+  .stat.gold .val { color: var(--gold); }
+  .stat.eco .val { color: var(--eco); }
+  .stat.tech .val { color: var(--tech); }
+  .stat.mil .val { color: var(--mil); }
+  .stat .sub { font-size: 9px; color: var(--muted); margin-top: 1px; min-height: 11px; }
+
+  /* enemy intent line — full width, between the boards and the controls */
+  .intent {
+    margin-top: 12px; text-align: center; font-size: 13px; color: var(--muted);
+    min-height: 20px; display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .intent-label {
+    font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--enemy);
+    border: 1px solid var(--enemy); border-radius: 999px; padding: 1px 8px;
+  }
+
+  /* controls bar — the player's actions live here so both boards stay identical */
+  .controls {
+    margin-top: 14px; background: var(--panel-solid); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px 16px;
+  }
+  .controls h3 { margin: 0 0 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
+  .btngrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; align-items: start; }
+  @media (max-width: 680px) { .btngrid { grid-template-columns: 1fr; } }
+  .act {
+    text-align: left; cursor: pointer; color: var(--text); width: 100%; display: block;
+    background: #131c2e; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 12px; transition: transform .08s ease, border-color .15s, background .15s;
+  }
+  button.act:hover:not(:disabled) { border-color: #3a4a6a; transform: translateY(-1px); background: #182236; }
+  button.act:disabled { opacity: .4; cursor: not-allowed; }
+  .train-tile { cursor: default; }
+  .act .atitle { font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+  .act .acost { font-size: 12px; color: var(--gold); font-weight: 700; white-space: nowrap; }
+  .act .adesc { font-size: 11px; color: var(--muted); margin-top: 3px; line-height: 1.3; }
+  .usebadge { display: inline-block; margin-top: 2px; padding: 1px 6px; border-radius: 6px; background: #1b2233; border: 1px solid var(--line); color: var(--tech); font-weight: 700; font-size: 10px; white-space: nowrap; }
+  .act.eco .atitle { color: var(--eco); }
+  .act.atk .atitle { color: var(--ratk); }
+  .act.def .atitle { color: var(--rdef); }
+  .act.mil .atitle { color: var(--mil); }
+  .act.attack .atitle { color: var(--enemy); }
+  .act.boost .atitle { color: var(--gold); }
+  .act.skip .atitle { color: var(--muted); }
+
+  /* dedicated Train confirm button inside the setup tile */
+  .trainbtn {
+    width: 100%; margin-top: 9px; cursor: pointer; font-weight: 800; font-size: 13px; letter-spacing: .5px;
+    color: #10151f; background: var(--mil); border: none; border-radius: 8px; padding: 8px 10px;
+  }
+  .trainbtn:hover:not(:disabled) { filter: brightness(1.08); }
+  .trainbtn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* boost indicator + glow */
+  .boostbadge {
+    font-size: 10px; font-weight: 800; letter-spacing: .5px; color: #10151f;
+    background: var(--gold); border-radius: 999px; padding: 1px 7px; vertical-align: middle;
+  }
+  .scene .boosted { filter: drop-shadow(0 0 2.5px var(--gold)); }
+
+  .typesel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 8px; }
+  .ty {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    padding: 5px 2px; border-radius: 7px; border: 1px solid var(--line);
+    background: #0f1626; font-size: 11px; font-weight: 700; color: var(--text); cursor: pointer;
+  }
+  .ty small { font-size: 9px; font-weight: 600; color: var(--muted); }
+  .ty small.beats { color: var(--eco); font-weight: 700; }
+  .ty:hover { border-color: #3a4a6a; }
+  .ty.on { border-color: var(--mil); background: #1d2740; box-shadow: 0 0 0 1px var(--mil) inset; }
+  .ty.on small { color: var(--mil); }
+
+  .trainctl { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .trainctl .step {
+    width: 30px; height: 30px; flex: 0 0 30px;
+    display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+    border-radius: 8px; border: 1px solid var(--line); background: #131c2e; color: var(--text);
+    font-size: 20px; font-weight: 700; cursor: pointer; user-select: none;
+  }
+  .trainctl .step:hover { border-color: #3a4a6a; background: #182236; }
+  .trainctl .step.off { opacity: .4; pointer-events: none; }
+  .trainctl .qty { width: 30px; text-align: center; font-weight: 800; font-size: 18px; line-height: 1; }
+  .trainctl .tcap { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+  .diffbar { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
+  .difflabel { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 2px; }
+  .diff {
+    cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted);
+    background: var(--panel-solid); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px;
+  }
+  .diff:hover { color: var(--text); border-color: #3a4a6a; }
+  .diff.on { color: var(--text); border-color: var(--tech); box-shadow: 0 0 0 1px var(--tech) inset; }
+
+  .log {
+    margin-top: 18px; background: var(--panel-solid); border: 1px solid var(--line);
+    border-radius: 14px; padding: 14px 16px; height: 170px; overflow-y: auto; font-size: 13px;
+  }
+  .log h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; }
+  .log .entry { padding: 3px 0; border-bottom: 1px dashed #1f293c; line-height: 1.4; }
+  .log .entry:last-child { border-bottom: none; }
+  .log .you-t { color: var(--you); font-weight: 700; }
+  .log .enemy-t { color: var(--enemy); font-weight: 700; }
+  .log .battle { color: var(--mil); font-weight: 700; }
+
+  .overlay {
+    position: fixed; inset: 0; background: #07090fdd; display: none;
+    align-items: center; justify-content: center; z-index: 50;
+  }
+  .overlay.show { display: flex; }
+  .modal { background: var(--panel-solid); border: 1px solid var(--line); border-radius: 16px; padding: 30px 34px; text-align: center; max-width: 440px; }
+  .modal h2 { margin: 0 0 8px; font-size: 28px; }
+  .modal p { color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
+  .modal.win h2 { color: var(--eco); }
+  .modal.lose h2 { color: var(--enemy); }
+  .bigbtn {
+    cursor: pointer; border: none; border-radius: 10px; padding: 12px 26px; font-size: 15px; font-weight: 800;
+    background: linear-gradient(90deg, var(--you), var(--tech)); color: #fff; letter-spacing: 1px;
+  }
+
+  /* cinematic battle pop-up */
+  .battle-overlay {
+    position: fixed; inset: 0; background: #07090fcc; display: none;
+    align-items: center; justify-content: center; z-index: 60; cursor: pointer;
+  }
+  .battle-overlay.show { display: flex; animation: fadeIn .15s ease; }
+  .battle-box {
+    width: min(94vw, 560px); background: var(--panel-solid); border: 1px solid var(--line);
+    border-radius: 16px; padding: 16px 16px 12px; text-align: center; box-shadow: 0 18px 60px #000b;
+  }
+  .battle-title { font-size: 21px; font-weight: 800; letter-spacing: 1px; color: var(--text); min-height: 26px; }
+  .battle-title.win { color: var(--eco); }
+  .battle-title.lose { color: var(--enemy); }
+  .battle-stage { margin-top: 10px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #86c9f2; }
+  .battle-stage svg { display: block; width: 100%; }
+  .battle-sub { margin-top: 9px; font-size: 14px; font-weight: 700; color: var(--muted); min-height: 18px; letter-spacing: .5px; }
+  .battle-hint { margin-top: 4px; font-size: 11px; color: var(--muted); opacity: .65; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .battle-stage .charge-att { animation: chargeRight .8s cubic-bezier(.5,0,.9,.6) both; }
+  .battle-stage .charge-def { animation: braceLeft .8s ease-out both; }
+  .battle-stage .bfall { animation: battleFall .6s ease-in both; }
+  .battle-stage .bspark { opacity: 0; animation: sparkPop .55s ease-out .76s; }
+  .battle-stage .bkeep.hit { animation: keepShake .45s ease-in-out .82s; }
+  @keyframes chargeRight { 0% { transform: translateX(0); } 70% { transform: translateX(80px); } 100% { transform: translateX(70px); } }
+  @keyframes braceLeft { 0% { transform: translateX(0); } 70% { transform: translateX(-16px); } 100% { transform: translateX(-11px); } }
+  @keyframes battleFall { 0% { transform: rotate(0) translateY(0); opacity: 1; } 100% { transform: rotate(74deg) translateY(7px); opacity: 0; } }
+  @keyframes sparkPop { 0% { opacity: 0; transform: scale(.3); } 35% { opacity: .95; } 100% { opacity: 0; transform: scale(1.5); } }
+  @keyframes keepShake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+
+  .help { margin-top: 18px; }
+  .help summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .help .body { font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 10px; }
+  .help b { color: var(--text); }
+  .k-eco { color: var(--eco); } .k-tech { color: var(--tech); } .k-mil { color: var(--mil); } .k-gold { color: var(--gold); } .k-boost { color: var(--gold); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TRIARCHY</h1>
+    <div class="tagline">A 1v1 strategy duel — Economy &middot; Research &middot; Military. Reduce the enemy Base to 0.</div>
+  </header>
+
+  <div class="turnbar">
+    <span id="turnchip" class="turnchip you">YOUR TURN</span>
+    <span class="turncount">Turn <b id="turnnum">1</b></span>
+    <span class="diffbar">
+      <span class="difflabel">Mode</span>
+      <button class="diff on" id="mode-ai">vs AI</button>
+      <button class="diff" id="mode-pvp">2 Players</button>
+    </span>
+    <span class="diffbar" id="diffbar-ai">
+      <span class="difflabel">AI</span>
+      <button class="diff" id="diff-easy">Easy</button>
+      <button class="diff on" id="diff-normal">Normal</button>
+      <button class="diff" id="diff-hard">Hard</button>
+    </span>
+  </div>
+
+  <div class="board">
+    <!-- PLAYER 1 -->
+    <div class="player you active" id="panel-you">
+      <div class="pname"><span id="you-name">PLAYER 1 (YOU)</span> <span class="boostbadge" id="you-boost" style="display:none"></span></div>
+      <div class="hpbar"><div class="hpfill" id="you-hpfill"></div><div class="hptext" id="you-hptext"></div></div>
+      <div class="scene" id="you-scene"></div>
+      <div class="stats">
+        <div class="stat gold"><div class="label">Gold</div><div class="val" id="you-gold">0</div><div class="sub" id="you-income"></div></div>
+        <div class="stat eco"><div class="label">Economy</div><div class="val" id="you-eco">0</div><div class="sub">income/turn</div></div>
+        <div class="stat tech"><div class="label">Research</div><div class="val" id="you-tech">0</div><div class="sub" id="you-techsub"></div></div>
+        <div class="stat mil"><div class="label">Army</div><div class="val" id="you-army">0</div><div class="sub" id="you-str"></div></div>
+      </div>
+    </div>
+
+    <!-- PLAYER 2 -->
+    <div class="player enemy" id="panel-enemy">
+      <div class="pname"><span id="enemy-name">PLAYER 2 (AI)</span> <span class="boostbadge" id="enemy-boost" style="display:none"></span></div>
+      <div class="hpbar"><div class="hpfill" id="enemy-hpfill"></div><div class="hptext" id="enemy-hptext"></div></div>
+      <div class="scene" id="enemy-scene"></div>
+      <div class="stats">
+        <div class="stat gold"><div class="label">Gold</div><div class="val" id="enemy-gold">0</div><div class="sub">&nbsp;</div></div>
+        <div class="stat eco"><div class="label">Economy</div><div class="val" id="enemy-eco">0</div><div class="sub">income/turn</div></div>
+        <div class="stat tech"><div class="label">Research</div><div class="val" id="enemy-tech">0</div><div class="sub" id="enemy-techsub"></div></div>
+        <div class="stat mil"><div class="label">Army</div><div class="val" id="enemy-army">0</div><div class="sub" id="enemy-str"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="intent" id="intent"><span class="intent-label">AI</span><span id="enemy-think">Waiting for your move...</span></div>
+
+  <div class="controls">
+    <h3 id="controls-head">Your move — take one action</h3>
+    <div class="btngrid">
+      <button class="act eco" id="btn-eco">
+        <div class="atitle"><span>Build Economy</span><span class="acost" id="cost-eco"></span></div>
+        <div class="adesc">+1 income every turn. Compounds — but builds no defense.</div>
+      </button>
+      <button class="act atk" id="btn-ratk">
+        <div class="atitle"><span>Research: Attack</span><span class="acost" id="cost-ratk"></span></div>
+        <div class="adesc">+1 attack to <i>every</i> troop you own. <span class="usebadge" id="ratk-used"></span></div>
+      </button>
+      <button class="act def" id="btn-rdef">
+        <div class="atitle"><span>Research: Defense</span><span class="acost" id="cost-rdef"></span></div>
+        <div class="adesc">+1 defense to <i>every</i> troop you own. <span class="usebadge" id="rdef-used"></span></div>
+      </button>
+      <div class="act mil train-tile">
+        <div class="atitle"><span>Train Troops</span><span class="acost" id="t-cost"></span></div>
+        <div class="typesel" id="typesel">
+          <span class="ty on" id="ty-inf" data-type="inf">Infantry<small id="ty-inf-stat"></small><small class="beats">&rsaquo; Knights</small></span>
+          <span class="ty" id="ty-arc" data-type="arc">Archers<small id="ty-arc-stat"></small><small class="beats">&rsaquo; Infantry</small></span>
+          <span class="ty" id="ty-kni" data-type="kni">Knights<small id="ty-kni-stat"></small><small class="beats">&rsaquo; Archers</small></span>
+        </div>
+        <div class="trainctl" id="trainctl">
+          <span class="step" id="t-minus">&minus;</span>
+          <span class="qty" id="t-qty">1</span>
+          <span class="step" id="t-plus">+</span>
+          <span class="tcap" id="t-cap"></span>
+        </div>
+        <button class="trainbtn" id="btn-train"><span id="train-label">Train</span></button>
+      </div>
+      <button class="act attack" id="btn-attack">
+        <div class="atitle"><span>Attack!</span><span class="acost" id="atk-cost">3g</span></div>
+        <div class="adesc" id="atk-desc">Send your army at the enemy. Defenders have the edge.</div>
+      </button>
+      <button class="act boost" id="btn-boost">
+        <div class="atitle"><span>Boost Attack</span><span class="acost" id="boost-cost">12g</span></div>
+        <div class="adesc" id="boost-desc">Once per game: +40% attack for your next 2 turns.</div>
+      </button>
+      <button class="act skip" id="btn-skip">
+        <div class="atitle"><span>Skip Turn</span><span class="acost">bank gold</span></div>
+        <div class="adesc">Take no action this turn — you still collect your income.</div>
+      </button>
+    </div>
+  </div>
+
+  <div class="log">
+    <h3>Battle Log</h3>
+    <div id="logbody"></div>
+  </div>
+
+  <details class="help">
+    <summary>How to play &amp; the strategy behind the three dynamics</summary>
+    <div class="body">
+      <p>Each turn you collect <span class="k-gold">Gold</span> equal to your <span class="k-eco">Economy</span>, then take <b>one</b> action (or <b>Skip</b> to just bank the gold). The enemy does the same. First to knock the opponent's Base from 30 to 0 wins. <b>Attacks unlock on turn 4</b> and cost <span class="k-gold">3 gold</span> to launch.</p>
+      <p><b>Modes</b> (top of the screen): <b>vs AI</b> plays against the computer at your chosen difficulty, or <b>2 Players</b> is local hotseat — two people share one device and the shared controls drive whoever's turn it is. Between turns a "your turn" screen lets you pass the device. Switching mode starts a fresh duel.</p>
+      <p><b class="k-eco">Economy</b> is the engine — more gold every turn (you'll see farms appear as it grows), up to a maximum of <b>+15/turn</b>. But a turn spent on economy is a turn not spent defending, so a pure economy player is exposed once attacks open up.</p>
+      <p><b class="k-mil">Military</b> is the only way to deal damage, capped at <b>15 troops</b>. Three types, each with attack/defense stats: <b>Infantry</b> (3g, 2/2 — balanced), <b>Archers</b> (3g, 3/1 — hit hard but fragile on defense), <b>Knights</b> (6g, 4/4 — elite, durable). When armies clash, the attacker's <i>attack</i> meets the defender's <i>defense</i>; <b>defenders have the edge</b>, and only overflow reaches the Base.</p>
+      <p><b>Counter triangle:</b> each unit deals <b>+30% attack</b> when it <i>attacks</i> the type it beats — <b>Infantry &rsaquo; Knights &rsaquo; Archers &rsaquo; Infantry</b> (defense is raw, so counters reward picking the right attacker, not reacting last). Watch the enemy's army on their field and bring the unit that counters their main force. The <b class="k-tech">AI reads your army too</b> and counters it — and it will rush you if you over-greed economy, so vary your play.</p>
+      <p><b class="k-tech">Research</b> comes in two tracks you choose between: <b>+Attack</b> (adds attack to every troop) and <b>+Defense</b> (adds defense to every troop). You get <b>5 research points total</b> across both tracks (e.g. 4 attack + 1 defense) — spend them to crack a turtle or harden against a rush.</p>
+      <p><b class="k-gold">Boost Attack</b> is a one-time trump card (you and the AI each get one): for <b>12 gold</b> it gives <b>+40% attack</b> on your next 2 turns. Activating it uses your turn, so time it right — pop it, then attack into a defense you couldn't otherwise break. Pick a troop type and quantity, then press the <b>Train</b> button to commit (nothing trains until you do).</p>
+      <p><b>The balance:</b> Economy beats a slow opponent, aggression beats greedy economy, and Research beats a big-but-primitive army. Mass <b>Archers</b> to break a turtle, or hold <b>Knights</b> to repel a rush. Set the <b class="k-tech">AI difficulty</b> up top — changing it starts a fresh duel.</p>
+    </div>
+  </details>
+</div>
+
+<div class="overlay" id="handoff-overlay">
+  <div class="modal win">
+    <h2 id="handoff-title"></h2>
+    <p>Pass the device to the next player, then tap below.</p>
+    <button class="bigbtn" id="handoff-ready">I'm Ready</button>
+  </div>
+</div>
+
+<div class="battle-overlay" id="battle-overlay">
+  <div class="battle-box">
+    <div class="battle-title" id="battle-title"></div>
+    <div class="battle-stage" id="battle-stage"></div>
+    <div class="battle-sub" id="battle-sub"></div>
+    <div class="battle-hint">click to skip</div>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="modal" id="modal">
+    <h2 id="modal-title"></h2>
+    <p id="modal-text"></p>
+    <button class="bigbtn" id="restart">Play Again</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const CFG = {
+  startHP: 30,
+  startGold: 4,
+  startEco: 2,
+  ecoCost: (eco) => 2 * eco,          // cost to raise economy by 1
+  techCost: (tech) => 3 + 3 * tech,   // cost to raise research by 1
+  attackCost: 3,                       // gold to launch an assault
+  attackUnlockTurn: 4,                 // no attacks on turns 1-3
+  armyCap: 15,                         // max total troops
+  boostCost: 12,                       // gold to activate the one-time boost
+  boostMult: 1.4,                      // +40% attack while boosted
+  boostDuration: 2,                    // active for your next 2 turns
+  ecoCap: 15,                          // max economy / income per turn
+  techCap: 5,                          // max total research traits (attack + defense combined)
+};
+
+// Troop types: attackers and defenders use different stats, so composition matters.
+const TROOPS = {
+  inf: { name: "Infantry", cost: 3, atk: 2, def: 2 },
+  arc: { name: "Archers",  cost: 3, atk: 3, def: 1 },
+  kni: { name: "Knights",  cost: 6, atk: 4, def: 4 },
+};
+const TYPES = ["inf", "arc", "kni"];
+
+// Counter triangle: each type beats one other (and gets a bonus against it in
+// combat), so no single unit dominates and composition becomes a live read.
+//   Infantry (pikes) beat Knights, Knights (charge) beat Archers, Archers (volleys) beat Infantry.
+const BEATS = { inf: "kni", kni: "arc", arc: "inf" };  // X beats BEATS[X]
+const COUNTER_OF = { kni: "inf", arc: "kni", inf: "arc" }; // unit that beats the key
+const COUNTER_BONUS = 0.30;                              // +30% when you attack the type you counter
+
+// All difficulties play the SAME baseline strategy; difficulty only changes how
+// often the AI blunders (mistake) and whether it defends a threat (defend). This
+// keeps the gradient monotonic: hard = the baseline played cleanly, easy = the
+// same plan frequently fumbled. No resource cheating.
+// "smart" = how reliably the AI makes the clever adaptive play (counter the
+// player's army, punish a greedy opening). Higher difficulty reads you better.
+const AI_BASE = { edge: 1.30, minEdge: 1.05, minDiff: 2, techCap: 4, techBias: 0.55 };
+const AI_PARAMS = {
+  easy:   { ...AI_BASE, mistake: 0.65, defend: 0.25, smart: 0.20 },
+  normal: { ...AI_BASE, mistake: 0.30, defend: 0.65, smart: 0.50 },
+  hard:   { ...AI_BASE, mistake: 0.08, defend: 0.90, smart: 0.75 },
+};
+
+function newPlayer() {
+  return { hp: CFG.startHP, gold: CFG.startGold, eco: CFG.startEco, atkTech: 0, defTech: 0, units: { inf: 0, arc: 0, kni: 0 }, boostUsed: false, boostStart: 0 };
+}
+
+let you, enemy, turnNo, current, busy, trainQty, selectedType, difficulty = "normal";
+let mode = "ai"; // "ai" = solo vs AI, "pvp" = local 2-player hotseat
+let prevScene; // tracks last-rendered army/dev per side to animate growth
+
+// The player acting right now, and the human-turn / naming helpers used so the
+// shared controls can drive either side in hotseat mode.
+function actor() { return current === "you" ? you : enemy; }
+function controlPlayer() { return mode === "pvp" ? actor() : you; }
+function isHumanTurn() { return mode === "pvp" ? true : current === "you"; }
+function sideName(side) { return mode === "pvp" ? (side === "you" ? "Player 1" : "Player 2") : (side === "you" ? "You" : "Enemy"); }
+function sideTag(side) { return mode === "pvp" ? (side === "you" ? "P1" : "P2") : (side === "you" ? "You" : "Enemy"); }
+
+function totalTroops(p) { return p.units.inf + p.units.arc + p.units.kni; }
+// Boost is active on the player's turns AFTER activation, for boostDuration turns.
+function boostActive(p) { return p.boostStart > 0 && turnNo > p.boostStart && turnNo <= p.boostStart + CFG.boostDuration; }
+function boostLeft(p) {
+  if (!p.boostStart) return 0;
+  if (turnNo === p.boostStart) return CFG.boostDuration;        // just activated, queued
+  return Math.max(0, p.boostStart + CFG.boostDuration - turnNo + 1);
+}
+function atkPower(p) { let s = 0; for (const t of TYPES) s += p.units[t] * (TROOPS[t].atk + p.atkTech); return boostActive(p) ? Math.floor(s * CFG.boostMult) : s; }
+function defPower(p) { let s = 0; for (const t of TYPES) s += p.units[t] * (TROOPS[t].def + p.defTech); return s; }
+
+// The army's biggest single type — its "main force" the opponent reads to counter.
+function dominantType(p) {
+  let best = null, bestN = 0;
+  for (const t of TYPES) if (p.units[t] > bestN) { bestN = p.units[t]; best = t; }
+  return best;
+}
+// Matchup-aware power: units that counter the enemy's main force fight at +bonus.
+function atkVs(att, def) {
+  const dMain = dominantType(def);
+  let s = 0;
+  for (const t of TYPES) {
+    let p = att.units[t] * (TROOPS[t].atk + att.atkTech);
+    if (dMain && BEATS[t] === dMain) p *= (1 + COUNTER_BONUS);
+    s += p;
+  }
+  if (boostActive(att)) s *= CFG.boostMult;
+  return Math.round(s);
+}
+// Counters are an OFFENSIVE tool only: the attacker who brings the unit that
+// beats the enemy's main force hits harder. Defense is raw — so it favours the
+// player who proactively picks the right attack, not the one who reacts last.
+function defVs(def, att) {
+  return defPower(def);
+}
+function clearArmy(p) { p.units = { inf: 0, arc: 0, kni: 0 }; }
+function reduceArmy(p, keep) { for (const t of TYPES) p.units[t] = Math.max(0, Math.round(p.units[t] * keep)); }
+function maxTrainable(p, type) { return Math.min(Math.floor(p.gold / TROOPS[type].cost), CFG.armyCap - totalTroops(p)); }
+function canAttack(p) { return turnNo >= CFG.attackUnlockTurn && totalTroops(p) > 0 && p.gold >= CFG.attackCost; }
+
+function reset() {
+  you = newPlayer();
+  enemy = newPlayer();
+  turnNo = 1;
+  current = "you";
+  busy = false;
+  trainQty = 1;
+  selectedType = "inf";
+  prevScene = { you: null, enemy: null };
+  document.getElementById("logbody").innerHTML = "";
+  document.getElementById("overlay").classList.remove("show");
+  log("A new duel begins. Build, research, raise an army — and break the enemy Base.", "");
+  startTurn("you"); // both sides collect turn-1 income for a symmetric start
+  render();
+}
+
+function log(msg, who) {
+  const body = document.getElementById("logbody");
+  const e = document.createElement("div");
+  e.className = "entry";
+  const tag = who === "you" ? '<span class="you-t">[' + sideTag("you") + ']</span> '
+            : who === "enemy" ? '<span class="enemy-t">[' + sideTag("enemy") + ']</span> '
+            : who === "battle" ? '<span class="battle">[Battle]</span> ' : "";
+  e.innerHTML = tag + msg;
+  body.appendChild(e);
+  body.scrollTop = body.scrollHeight;
+}
+
+// ---- Battlefield visuals ----
+// Draws an SVG scene per side: a castle that grows with development (economy +
+// research) and ranks of troops that amass and gear up as research advances.
+const GROUND_Y = 92;
+
+function drawScene(key, p) {
+  const el = document.getElementById(key + "-scene");
+  if (!el) return;
+  const dev = Math.max(0, (p.eco - CFG.startEco) + p.atkTech + p.defTech);
+  const u = p.units;
+  const boosted = boostActive(p);
+  const sig = u.inf + "," + u.arc + "," + u.kni + "|" + dev + "|" + p.eco + "|" + p.atkTech + "," + p.defTech + "|" + Math.max(0, p.hp) + "|b" + (boosted ? 1 : 0);
+  const prev = prevScene[key];
+  if (prev && prev.sig === sig) return; // nothing visual changed — keep DOM (and any running animation)
+  const pu = prev ? prev.units : { inf: 0, arc: 0, kni: 0 };
+  const newBy = { inf: Math.max(0, u.inf - pu.inf), arc: Math.max(0, u.arc - pu.arc), kni: Math.max(0, u.kni - pu.kni) };
+  const grewBase = prev ? dev > prev.dev : false;
+  el.innerHTML = buildScene(p, key, dev, grewBase, newBy, boosted);
+  prevScene[key] = { sig, units: { inf: u.inf, arc: u.arc, kni: u.kni }, dev };
+}
+
+// One soldier, drawn standing with feet at the origin; glyph varies by type.
+// Attack research (aT) shows on weapons; defense research (dT) shows as armour.
+// The soldier shapes themselves, drawn with feet at the local origin (0,0).
+function troopBody(type, main, dark, aT, dT) {
+  let g = "";
+  if (type === "arc") {                                   // archer: bow + arrow
+    g += '<path d="M-6 -16 Q-11 -9 -6 -2" fill="none" stroke="#9a6a33" stroke-width="1.3"/>';
+    g += '<line x1="-6" y1="-16" x2="-6" y2="-2" stroke="#cbd5e1" stroke-width="0.5"/>';
+    g += '<line x1="-7" y1="-9" x2="3" y2="-9" stroke="#e6ecf5" stroke-width="0.8"/>';
+  } else if (type === "kni") {                            // knight: sword
+    g += '<line x1="6.5" y1="-21" x2="6.5" y2="0" stroke="#dfe7f2" stroke-width="1.5"/>';
+    g += '<line x1="3.5" y1="-15" x2="9.5" y2="-15" stroke="' + dark + '" stroke-width="1.3"/>';
+  } else {                                                // infantry: spear (longer + pennant with attack research)
+    const sp = -22 - (aT >= 2 ? 4 : 0);
+    g += '<line x1="5.5" y1="' + sp + '" x2="5.5" y2="1" stroke="#c7d2e0" stroke-width="1"/>';
+    g += '<path d="M5.5 ' + sp + ' l-2 4 l4 0 z" fill="#e6ecf5"/>';
+    if (aT >= 2) g += '<path d="M5.5 ' + (sp + 2) + ' l6 2 l-6 2 z" fill="' + main + '"/>';
+  }
+  if (type === "kni" || dT >= 2) g += '<rect x="-8" y="-13" width="4" height="8" rx="1" fill="' + dark + '" stroke="' + main + '" stroke-width="0.6"/>';
+  const bw = type === "kni" ? 7 : 6;
+  g += '<rect x="' + (-bw / 2) + '" y="-15" width="' + bw + '" height="13" rx="1.5" fill="' + main + '" stroke="' + dark + '" stroke-width="0.6"/>';
+  g += '<circle cx="0" cy="-18" r="3" fill="#ffd9b0" stroke="' + dark + '" stroke-width="0.5"/>';
+  if (type === "kni") {                                   // knights: helmet + plume always
+    g += '<path d="M-3.4 -18 A3.4 3.4 0 0 1 3.4 -18 Z" fill="' + dark + '"/>';
+    g += '<line x1="0" y1="-21" x2="0" y2="-25" stroke="' + main + '" stroke-width="1"/>';
+    g += '<path d="M0 -25 l3.5 1.5 l-3.5 1.5 z" fill="' + main + '"/>';
+  } else if (aT >= 1 || dT >= 1) {                        // helmet once either research starts
+    g += '<path d="M-3.4 -18 A3.4 3.4 0 0 1 3.4 -18 Z" fill="' + dark + '"/>';
+  }
+  return g;
+}
+
+// Outer group positions the troop via the transform ATTRIBUTE; the inner group
+// carries the rise/pop animation. Keeping them separate stops the CSS keyframe's
+// transform from overriding the troop's battlefield position (which made fresh
+// troops jump to the origin and vanish).
+function troopGlyph(type, x, yFeet, s, isNew, main, dark, aT, dT) {
+  return '<g transform="translate(' + x.toFixed(1) + ',' + yFeet.toFixed(1) + ') scale(' + s.toFixed(2) + ')">'
+    + '<g class="trp' + (isNew ? " new" : "") + '">' + troopBody(type, main, dark, aT, dT) + "</g></g>";
+}
+
+// A sunny daytime backdrop — drawn behind everything and not mirrored, so the sun
+// and clouds stay put for both camps.
+function skyLayer() {
+  let s = "";
+  // sun with warm halo, upper right
+  s += '<circle cx="240" cy="26" r="27" fill="url(#sunGlow)"/>';
+  s += '<circle cx="240" cy="26" r="11" fill="#fff1a2"/>';
+  s += '<circle cx="240" cy="26" r="8" fill="#fffbe2"/>';
+  // fluffy clouds
+  s += cloudGlyph(62, 30, 1);
+  s += cloudGlyph(182, 20, 0.78);
+  s += cloudGlyph(120, 54, 0.66);
+  // distant forested hills — a hazy back range, then a greener front range with pines
+  s += hillRange(82, "#9ccf93", null);
+  s += hillRange(90, "#69ad4d", "#3c7a37");
+  return s;
+}
+function cloudGlyph(cx, cy, sc) {
+  return '<g fill="#ffffff" opacity="0.95" transform="translate(' + cx + ',' + cy + ') scale(' + sc + ')">'
+    + '<ellipse cx="0" cy="0" rx="15" ry="6"/><ellipse cx="-9" cy="2.5" rx="9" ry="5"/><ellipse cx="9" cy="2.5" rx="10" ry="5"/><ellipse cx="2" cy="-3.5" rx="8" ry="5"/></g>';
+}
+function hillRange(baseY, color, treeColor) {
+  let s = '<path d="M0 ' + baseY + ' Q80 ' + (baseY - 10) + ' 160 ' + (baseY - 2) + ' T300 ' + (baseY - 4) + ' L300 99 L0 99 Z" fill="' + color + '"/>';
+  if (treeColor) {
+    for (let tx = 12, k = 0; tx < 296; tx += 19, k++) {
+      const ty = baseY - 1, hh = 7 + (k % 2 ? 1.6 : 0);
+      s += '<path d="M' + tx + ' ' + ty + ' l-3 0 l3 ' + (-hh).toFixed(1) + ' l3 ' + hh.toFixed(1) + ' z" fill="' + treeColor + '" opacity="' + (k % 2 ? 1 : 0.88) + '"/>';
+    }
+  }
+  return s;
+}
+
+// Forge — the Attack-research building. Grows taller with a brighter furnace and
+// more chimney embers as the level climbs.
+function forgeGlyph(level, x, baseY) {
+  const w = 15 + level * 2, h = 12 + level * 2.5, top = baseY - h;
+  const stone = "#6b7689", sdark = "#3c4655";
+  let g = '<g>';
+  g += '<rect x="' + x + '" y="' + top + '" width="' + w + '" height="' + h + '" rx="1" fill="' + stone + '" stroke="' + sdark + '" stroke-width="0.8"/>';
+  g += '<path d="M' + (x - 2) + ' ' + top + ' L' + (x + w / 2) + ' ' + (top - 7) + ' L' + (x + w + 2) + ' ' + top + ' Z" fill="#454f5e" stroke="' + sdark + '" stroke-width="0.8"/>';
+  const chx = x + w - 4.5;
+  g += '<rect x="' + chx + '" y="' + (top - 11) + '" width="3.5" height="9" fill="' + sdark + '"/>';
+  const ox = x + 3, oy = baseY - h * 0.52, ow = w * 0.42, oh = h * 0.46;
+  g += '<rect x="' + ox + '" y="' + oy + '" width="' + ow + '" height="' + oh + '" rx="1.5" fill="#ff7a1a" opacity="' + (0.5 + level * 0.1).toFixed(2) + '"/>';
+  g += '<rect x="' + (ox + 1) + '" y="' + (oy + 1.5) + '" width="' + (ow - 2) + '" height="' + (oh - 2.5) + '" rx="1" fill="#ffd070" opacity="' + (0.35 + level * 0.12).toFixed(2) + '"/>';
+  for (let i = 0; i < level; i++) {
+    const ex = chx + 1.7 + (i % 2 ? 1.4 : -1.4), ey = top - 11 - i * 3;
+    g += '<circle cx="' + ex.toFixed(1) + '" cy="' + ey.toFixed(1) + '" r="' + (1.2 - i * 0.12).toFixed(2) + '" fill="#ff9d4d" opacity="' + (0.85 - i * 0.13).toFixed(2) + '"/>';
+  }
+  g += "</g>";
+  return g;
+}
+
+// Academy — the Defense-research building. A stone tower that rises with more lit
+// windows, a banner, and a shield as the level climbs.
+function academyGlyph(level, x, baseY) {
+  const w = 12 + level, h = 15 + level * 3, top = baseY - h;
+  const stone = "#6b7689", sdark = "#3c4655";
+  let g = '<g>';
+  g += '<rect x="' + x + '" y="' + top + '" width="' + w + '" height="' + h + '" rx="1" fill="' + stone + '" stroke="' + sdark + '" stroke-width="0.8"/>';
+  for (let cx = x; cx + 2.4 <= x + w; cx += 4.2) g += '<rect x="' + cx.toFixed(1) + '" y="' + (top - 3) + '" width="2.4" height="3.4" fill="' + sdark + '"/>';
+  for (let i = 0; i < level; i++) g += '<rect x="' + (x + w / 2 - 1.6).toFixed(1) + '" y="' + (top + 4 + i * 5).toFixed(1) + '" width="3.2" height="4" rx="0.6" fill="#ffce5c"/>';
+  const px = x + w / 2;
+  g += '<line x1="' + px + '" y1="' + (top - 3) + '" x2="' + px + '" y2="' + (top - 12) + '" stroke="#cbd5e1" stroke-width="0.8"/>';
+  g += '<path d="M' + px + ' ' + (top - 12) + ' l7 2.5 l-7 2.5 z" fill="#62b8ff"/>';
+  if (level >= 2) { const sx = x + w / 2, sy = baseY - 6; g += '<path d="M' + (sx - 3) + ' ' + (sy - 3) + ' h6 v3 q0 3 -3 4 q-3 -1 -3 -4 z" fill="#3a6ea5" stroke="#9fd0ff" stroke-width="0.5"/>'; }
+  g += "</g>";
+  return g;
+}
+
+// Smoke billowing from a battered keep (level 1 when hurt, 2 when critical).
+function smokeGroup(cx, baseTop, level) {
+  let g = '<g class="smoke">';
+  const puffs = level >= 2 ? 5 : 3;
+  for (let i = 0; i < puffs; i++) {
+    const py = baseTop - i * 7, px = cx + (i % 2 ? 4 : -3) + i * 0.6, r = 3 + i * 0.8, op = 0.5 - i * 0.07;
+    g += '<circle cx="' + px.toFixed(1) + '" cy="' + py.toFixed(1) + '" r="' + r.toFixed(1) + '" fill="#3a4150" opacity="' + op.toFixed(2) + '"/>';
+  }
+  g += "</g>";
+  return g;
+}
+
+function buildScene(p, side, dev, grewBase, newBy, boosted) {
+  const main = side === "you" ? "#3aa6ff" : "#ff5d5d";
+  const dark = side === "you" ? "#1f5c96" : "#9e2b2b";
+  const lite = side === "you" ? "#7fc4ff" : "#ff9a9a";
+  const gid = "grad-" + side;
+  const hpRatio = Math.max(0, p.hp) / CFG.startHP;
+
+  // ---- Castle ----
+  const wallX = 14;
+  const cw = Math.min(40 + dev * 3, 78);
+  const ch = Math.min(34 + dev * 5, 74);
+  const wallTop = GROUND_Y - ch;
+  let c = "";
+
+  // towers (left + right), slightly taller than the wall
+  const ltX = wallX - 5, rtX = wallX + cw - 9, tw = 14;
+  const ltTop = GROUND_Y - (ch + 12), rtTop = GROUND_Y - (ch + 16);
+  c += '<rect x="' + ltX + '" y="' + ltTop + '" width="' + tw + '" height="' + (GROUND_Y - ltTop) + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+  c += '<rect x="' + rtX + '" y="' + rtTop + '" width="' + tw + '" height="' + (GROUND_Y - rtTop) + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+
+  // main wall
+  c += '<rect x="' + wallX + '" y="' + wallTop + '" width="' + cw + '" height="' + ch + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+
+  // battlements (crenellations) on wall + towers
+  const cren = (x0, x1, topY) => {
+    let s = "";
+    for (let x = x0; x + 5 <= x1; x += 9) s += '<rect x="' + x + '" y="' + (topY - 5) + '" width="5" height="6" fill="' + dark + '"/>';
+    return s;
+  };
+  c += cren(wallX + 1, wallX + cw - 1, wallTop);
+  c += cren(ltX + 1, ltX + tw - 1, ltTop);
+  c += cren(rtX + 1, rtX + tw - 1, rtTop);
+
+  // gate
+  const gw = 16, gx = wallX + cw / 2 - gw / 2, gTop = GROUND_Y - 22;
+  c += '<path d="M' + gx + ' ' + GROUND_Y + ' L' + gx + ' ' + (gTop + 6) + ' Q' + (gx + gw / 2) + ' ' + (gTop - 4) + ' ' + (gx + gw) + ' ' + (gTop + 6) + ' L' + (gx + gw) + ' ' + GROUND_Y + ' Z" fill="#0a0f1a" stroke="' + dark + '" stroke-width="0.8"/>';
+
+  // lit windows appear as the keep develops
+  const win = Math.min(dev, 6);
+  for (let k = 0; k < win; k++) {
+    const wx = wallX + 8 + (k % 3) * ((cw - 18) / 2);
+    const wy = wallTop + 8 + Math.floor(k / 3) * 14;
+    c += '<rect x="' + wx.toFixed(1) + '" y="' + wy.toFixed(1) + '" width="4" height="6" rx="0.8" fill="#ffce5c"/>';
+  }
+
+  // flags grow with research
+  const nFlags = Math.min(1 + p.atkTech + p.defTech, 4);
+  const flagSpots = [[ltX + tw / 2, ltTop], [rtX + tw / 2, rtTop], [wallX + cw * 0.32, wallTop], [wallX + cw * 0.68, wallTop]];
+  for (let f = 0; f < nFlags; f++) {
+    const [fx, fy] = flagSpots[f];
+    c += '<line x1="' + fx.toFixed(1) + '" y1="' + (fy - 1) + '" x2="' + fx.toFixed(1) + '" y2="' + (fy - 13) + '" stroke="#cbd5e1" stroke-width="1"/>';
+    c += '<path d="M' + fx.toFixed(1) + ' ' + (fy - 13) + ' l9 3 l-9 3 z" fill="' + lite + '"/>';
+  }
+
+  // damage cracks as the base loses HP
+  if (hpRatio < 0.66) c += '<polyline points="' + (wallX + cw * 0.4) + ',' + wallTop + ' ' + (wallX + cw * 0.5) + ',' + (wallTop + ch * 0.4) + ' ' + (wallX + cw * 0.42) + ',' + (wallTop + ch * 0.7) + ' ' + (wallX + cw * 0.52) + ',' + GROUND_Y + '" fill="none" stroke="#0a0f1a" stroke-width="1.4"/>';
+  if (hpRatio < 0.33) c += '<polyline points="' + (wallX + cw * 0.7) + ',' + wallTop + ' ' + (wallX + cw * 0.62) + ',' + (wallTop + ch * 0.5) + ' ' + (wallX + cw * 0.72) + ',' + GROUND_Y + '" fill="none" stroke="#0a0f1a" stroke-width="1.4"/>';
+
+  // grow pulse on the whole castle when development increases
+  c = '<g class="castle' + (grewBase ? " grow" : "") + '">' + c + "</g>";
+
+  // ---- Foreground town: research buildings + fields (drawn in front, unanimated) ----
+  let fg = "";
+  // research buildings — a forge (Attack) and an academy (Defense) that grow per level
+  if (p.defTech > 0) fg += academyGlyph(Math.min(p.defTech, 4), 4, 126);
+  if (p.atkTech > 0) fg += forgeGlyph(Math.min(p.atkTech, 4), 26, 126);
+  // farms — one tilled plot per economy level above the start
+  const nFarms = Math.min(p.eco - CFG.startEco, 5);
+  for (let k = 0; k < nFarms; k++) {
+    const fx = 58 + k * 16;
+    const fy = GROUND_Y + 18 + (k % 2) * 11;
+    fg += '<path d="M' + fx + ' ' + fy + ' l13 0 l3 7 l-13 0 z" fill="#3f7d3a" stroke="#2c5a28" stroke-width="0.6"/>';
+    fg += '<path d="M' + (fx + 3) + ' ' + (fy + 2) + ' l11 0 M' + (fx + 2) + ' ' + (fy + 4.5) + ' l12 0" stroke="#5fae54" stroke-width="0.6"/>';
+    if (k % 2 === 1) fg += '<path d="M' + (fx + 15) + ' ' + (fy + 6) + ' l3 -6 l3 6 z" fill="#e7c14b" stroke="#b8941f" stroke-width="0.5"/>';
+  }
+
+  // ---- Troops ----
+  // flatten the army into a list, flagging the freshly-trained ones per type
+  const flat = [];
+  for (const ty of TYPES) {
+    const nt = p.units[ty], nn = newBy[ty] || 0;
+    for (let i = 0; i < nt; i++) flat.push({ ty, isNew: i >= nt - nn });
+  }
+  let t = "";
+  const maxVis = CFG.armyCap;
+  const x0 = wallX + cw + 14;
+  const n = Math.min(flat.length, maxVis);
+  // a single rank, left-to-right; spacing compresses so all 15 stay on the field
+  const gap = Math.min(14, (296 - x0) / Math.max(1, n - 1));
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * gap;
+    const sc = flat[i].ty === "kni" ? 1.12 : 1;
+    t += troopGlyph(flat[i].ty, x, GROUND_Y, sc, flat[i].isNew, main, dark, p.atkTech, p.defTech);
+  }
+  // wrap troops so we can apply a gold glow while boosted
+  t = '<g class="troops' + (boosted ? " boosted" : "") + '">' + t + "</g>";
+
+  const defs = '<defs>'
+    + '<linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + lite + '"/><stop offset="1" stop-color="' + dark + '"/></linearGradient>'
+    + '<radialGradient id="sunGlow"><stop offset="0" stop-color="#fff0a0" stop-opacity="0.85"/><stop offset="1" stop-color="#fff0a0" stop-opacity="0"/></radialGradient>'
+    + '</defs>';
+  // smoke pours from the keep as the Base is battered
+  const smoke = hpRatio < 0.5 ? smokeGroup(wallX + cw / 2, wallTop - 2, hpRatio < 0.33 ? 2 : 1) : "";
+  const body = c + smoke + t + fg;
+  // mirror the enemy so the two camps face each other across the center
+  const inner = side === "enemy" ? '<g transform="translate(300,0) scale(-1,1)">' + body + "</g>" : body;
+  return '<svg viewBox="0 0 300 150" preserveAspectRatio="xMidYMax meet">' + defs + skyLayer() + inner + "</svg>";
+}
+
+function render() {
+  for (const [key, p] of [["you", you], ["enemy", enemy]]) {
+    const hpPct = Math.max(0, p.hp) / CFG.startHP * 100;
+    document.getElementById(key + "-hpfill").style.width = hpPct + "%";
+    document.getElementById(key + "-hptext").textContent = "Base " + Math.max(0, p.hp) + " / " + CFG.startHP;
+    document.getElementById(key + "-gold").textContent = p.gold;
+    document.getElementById(key + "-eco").textContent = p.eco;
+    document.getElementById(key + "-tech").textContent = "+" + p.atkTech + "/+" + p.defTech;
+    document.getElementById(key + "-army").textContent = totalTroops(p) + "/" + CFG.armyCap;
+    document.getElementById(key + "-str").textContent = "atk " + atkPower(p) + " / def " + defPower(p);
+    const techsub = document.getElementById(key + "-techsub");
+    if (techsub) techsub.textContent = "atk / def";
+    const bb = document.getElementById(key + "-boost");
+    const bn = boostLeft(p);
+    bb.style.display = (p.boostUsed && bn > 0) ? "inline-block" : "none";
+    bb.textContent = "BOOST x" + CFG.boostMult + " (" + bn + ")";
+    drawScene(key, p);
+  }
+  document.getElementById("you-income").textContent = "+" + you.eco + "/turn";
+
+  document.getElementById("turnnum").textContent = turnNo;
+  const pvp = mode === "pvp";
+  const chip = document.getElementById("turnchip");
+  chip.className = "turnchip " + current;
+  chip.textContent = pvp ? (current === "you" ? "PLAYER 1" : "PLAYER 2") : (current === "you" ? "YOUR TURN" : "ENEMY TURN");
+  document.getElementById("panel-you").classList.toggle("active", current === "you");
+  document.getElementById("panel-enemy").classList.toggle("active", current === "enemy");
+  // labels + chrome adapt to the mode
+  document.getElementById("you-name").textContent = pvp ? "PLAYER 1" : "PLAYER 1 (YOU)";
+  document.getElementById("enemy-name").textContent = pvp ? "PLAYER 2" : "PLAYER 2 (AI)";
+  document.getElementById("diffbar-ai").style.display = pvp ? "none" : "";
+  document.getElementById("intent").style.display = pvp ? "none" : "";
+  document.getElementById("mode-ai").classList.toggle("on", !pvp);
+  document.getElementById("mode-pvp").classList.toggle("on", pvp);
+  document.getElementById("controls-head").textContent = pvp ? sideName(current) + " — take one action" : "Your move — take one action";
+
+  // the player the shared controls represent (active side in hotseat; always you vs AI)
+  const ap = controlPlayer();
+  const ecoCost = CFG.ecoCost(ap.eco);
+  const atkResCost = CFG.techCost(ap.atkTech);
+  const defResCost = CFG.techCost(ap.defTech);
+  const pct = Math.round((CFG.boostMult - 1) * 100);
+  const ecoMaxed = ap.eco >= CFG.ecoCap;
+  const techUsed = ap.atkTech + ap.defTech;
+  const techMaxed = techUsed >= CFG.techCap;
+  document.getElementById("cost-eco").textContent = ecoMaxed ? "MAXED" : ecoCost + "g";
+  document.getElementById("cost-ratk").textContent = techMaxed ? "MAXED" : atkResCost + "g";
+  document.getElementById("cost-rdef").textContent = techMaxed ? "MAXED" : defResCost + "g";
+  document.getElementById("ratk-used").textContent = techUsed + " of " + CFG.techCap + " used";
+  document.getElementById("rdef-used").textContent = techUsed + " of " + CFG.techCap + " used";
+
+  // training: clamp the chosen quantity to what's affordable and under the cap
+  const capLeft = CFG.armyCap - totalTroops(ap);
+  const trainMax = maxTrainable(ap, selectedType);
+  trainQty = Math.max(1, Math.min(trainQty, Math.max(1, trainMax)));
+  const trainN = Math.min(trainQty, trainMax);
+  document.getElementById("t-cost").textContent = (trainN * TROOPS[selectedType].cost) + "g";
+  document.getElementById("t-qty").textContent = trainN;
+  document.getElementById("t-cap").textContent = capLeft + " slot" + (capLeft === 1 ? "" : "s") + " left";
+  for (const ty of TYPES) {
+    document.getElementById("ty-" + ty).classList.toggle("on", ty === selectedType);
+    // show effective stats including current research
+    document.getElementById("ty-" + ty + "-stat").textContent =
+      TROOPS[ty].cost + "g · " + (TROOPS[ty].atk + ap.atkTech) + "/" + (TROOPS[ty].def + ap.defTech);
+  }
+  document.getElementById("train-label").textContent =
+    "Train " + trainN + " " + TROOPS[selectedType].name + (trainMax >= 1 ? " (" + (trainN * TROOPS[selectedType].cost) + "g)" : "");
+
+  // boost state
+  document.getElementById("boost-cost").textContent = ap.boostUsed ? "used" : CFG.boostCost + "g";
+  document.getElementById("boost-desc").textContent = ap.boostUsed
+    ? (boostLeft(ap) > 0 ? "Active: +" + pct + "% attack (" + boostLeft(ap) + " turn" + (boostLeft(ap) === 1 ? "" : "s") + " left)." : "Already used this game.")
+    : "Once per game: +" + pct + "% attack for your next " + CFG.boostDuration + " turns.";
+
+  // attack lock state
+  const locked = turnNo < CFG.attackUnlockTurn;
+  document.getElementById("atk-cost").textContent = locked ? "turn " + CFG.attackUnlockTurn : CFG.attackCost + "g";
+  document.getElementById("atk-desc").textContent = locked
+    ? "Armies mobilize — attacking unlocks on turn " + CFG.attackUnlockTurn + "."
+    : "Send your army at the enemy (costs " + CFG.attackCost + "g). Defenders have the edge.";
+
+  const myTurn = isHumanTurn() && !busy && you.hp > 0 && enemy.hp > 0;
+  document.getElementById("btn-eco").disabled = !myTurn || ecoMaxed || ap.gold < ecoCost;
+  document.getElementById("btn-ratk").disabled = !myTurn || techMaxed || ap.gold < atkResCost;
+  document.getElementById("btn-rdef").disabled = !myTurn || techMaxed || ap.gold < defResCost;
+  document.getElementById("btn-train").disabled = !myTurn || trainMax < 1;
+  document.getElementById("btn-attack").disabled = !myTurn || !canAttack(ap);
+  document.getElementById("btn-boost").disabled = !myTurn || ap.boostUsed || ap.gold < CFG.boostCost;
+  document.getElementById("btn-skip").disabled = !myTurn;
+  document.getElementById("t-minus").classList.toggle("off", !myTurn);
+  document.getElementById("t-plus").classList.toggle("off", !myTurn);
+}
+
+// ---- Combat ----
+// Attacker's ATTACK clashes with defender's DEFENSE (both matchup-adjusted by the
+// counter triangle); overflow hits the Base.
+function counterNote(army, opp, verb) {
+  const oppMain = dominantType(opp);
+  if (!oppMain) return "";
+  const cType = COUNTER_OF[oppMain];        // unit that counters their main force
+  if (army.units[cType] > 0) return " <i>(" + TROOPS[cType].name + " " + verb + " their " + TROOPS[oppMain].name + ", +" + Math.round(COUNTER_BONUS * 100) + "%)</i>";
+  return "";
+}
+function resolveAttack(att, def, attName, defName) {
+  const aStr = atkVs(att, def);
+  if (aStr === 0) { log(attName + " has no army to attack with.", "battle"); return { outcome: "noArmy", attName, defName }; }
+  const dStr = defVs(def, att);
+  const aNote = counterNote(att, def, "counter");
+  const dNote = counterNote(def, att, "hold off");
+
+  if (dStr === 0) {
+    def.hp -= aStr;
+    log(attName + " strikes an undefended Base for <b>" + aStr + "</b> damage!" + aNote, "battle");
+    return { outcome: "undefended", aStr, dStr: 0, dmg: aStr, attName, defName };
+  }
+
+  if (aStr > dStr) {
+    const overflow = aStr - dStr;
+    clearArmy(def);                       // defenders wiped
+    reduceArmy(att, (aStr - dStr) / aStr); // attacker keeps the overflow fraction
+    def.hp -= overflow;
+    log(attName + " (atk " + aStr + ") overruns " + defName + "'s defense (def " + dStr +
+        "), wipes the defenders and hits the Base for <b>" + overflow + "</b>." + aNote, "battle");
+    return { outcome: "wipeDef", aStr, dStr, dmg: overflow, attName, defName };
+  } else {
+    reduceArmy(def, (dStr - aStr) / dStr); // defender takes proportional losses
+    clearArmy(att);                        // attacking army destroyed
+    log(defName + "'s defense (def " + dStr + ") holds against " + attName + " (atk " + aStr +
+        "). The attackers are destroyed; the Base is unharmed." + dNote, "battle");
+    return { outcome: "holdDef", aStr, dStr, dmg: 0, attName, defName };
+  }
+}
+
+// ---- Cinematic battle pop-up ----
+// Snapshot the two armies (pre-resolution), resolve, then play the clash modal.
+let battleFX = true;
+function performAttack(att, def, attName, defName, onDone) {
+  const snap = {
+    att: { side: att === you ? "you" : "enemy", units: { ...att.units }, atkTech: att.atkTech, defTech: att.defTech },
+    def: { side: def === you ? "you" : "enemy", units: { ...def.units }, atkTech: def.atkTech, defTech: def.defTech },
+  };
+  const res = resolveAttack(att, def, attName, defName);
+  render();
+  if (!battleFX || !res || res.outcome === "noArmy") { onDone(); return; }
+  playBattle(snap, res, onDone);
+}
+
+function lineUpBattle(snap, dir, startX, endX, role, falls) {
+  const col = snap.side === "you" ? "#3aa6ff" : "#ff5d5d";
+  const dark = snap.side === "you" ? "#1f5c96" : "#9e2b2b";
+  const flat = [];
+  for (const ty of TYPES) for (let i = 0; i < snap.units[ty]; i++) flat.push(ty);
+  const n = Math.min(flat.length, 10);
+  if (n === 0) return "";
+  const gap = n > 1 ? (endX - startX) / (n - 1) : 0;
+  const chargeCls = role === "att" ? "charge-att" : "charge-def";
+  let g = "";
+  for (let i = 0; i < n; i++) {
+    const x = startX + i * gap;
+    const sc = (flat[i] === "kni" ? 1.18 : 1.05) * dir;   // dir -1 mirrors defenders to face left
+    const inner = '<g transform="translate(' + x.toFixed(1) + ',96) scale(' + sc.toFixed(2) + ',' + Math.abs(sc).toFixed(2) + ')">'
+      + (falls ? '<g class="bfall" style="animation-delay:' + (0.9 + i * 0.03).toFixed(2) + 's">' : '<g>')
+      + troopBody(flat[i], col, dark, snap.atkTech, snap.defTech) + '</g></g>';
+    g += '<g class="' + chargeCls + '">' + inner + '</g>';
+  }
+  return g;
+}
+
+function miniCastle(cx, side, hit) {
+  const dark = side === "you" ? "#1f5c96" : "#9e2b2b";
+  const lite = side === "you" ? "#7fc4ff" : "#ff9a9a";
+  const w = 48, h = 46, x = cx - w / 2, top = 96 - h, gid = "bkeep-" + side;
+  let c = '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + lite + '"/><stop offset="1" stop-color="' + dark + '"/></linearGradient></defs>';
+  c += '<g class="bkeep' + (hit ? " hit" : "") + '">';
+  c += '<rect x="' + (x - 6) + '" y="' + (top - 8) + '" width="12" height="' + (h + 8) + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+  c += '<rect x="' + (x + w - 6) + '" y="' + (top - 8) + '" width="12" height="' + (h + 8) + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+  c += '<rect x="' + x + '" y="' + top + '" width="' + w + '" height="' + h + '" fill="url(#' + gid + ')" stroke="' + dark + '" stroke-width="1"/>';
+  for (let bx = x - 6; bx + 5 <= x + w + 6; bx += 10) c += '<rect x="' + bx + '" y="' + (top - 13) + '" width="5" height="6" fill="' + dark + '"/>';
+  c += '<path d="M' + (cx - 9) + ' 96 L' + (cx - 9) + ' ' + (top + 16) + ' Q' + cx + ' ' + (top + 6) + ' ' + (cx + 9) + ' ' + (top + 16) + ' L' + (cx + 9) + ' 96 Z" fill="#0a0f1a" stroke="' + dark + '" stroke-width="0.8"/>';
+  c += '</g>';
+  return c;
+}
+
+function battleStageSVG(snap, res) {
+  const attWins = res.outcome === "wipeDef" || res.outcome === "undefended";
+  let s = '<svg viewBox="0 0 320 150" preserveAspectRatio="xMidYMid meet">';
+  s += '<defs><linearGradient id="bsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#86c9f2"/><stop offset="1" stop-color="#cdeafb"/></linearGradient></defs>';
+  s += '<rect x="0" y="0" width="320" height="150" fill="url(#bsky)"/>';
+  s += '<circle cx="44" cy="22" r="17" fill="#fff1a2" opacity="0.85"/>';
+  s += '<g fill="#fff" opacity="0.9"><ellipse cx="140" cy="24" rx="16" ry="6"/><ellipse cx="128" cy="27" rx="10" ry="5"/></g>';
+  s += '<g fill="#fff" opacity="0.8"><ellipse cx="238" cy="36" rx="13" ry="5"/><ellipse cx="228" cy="38" rx="8" ry="4"/></g>';
+  s += '<rect x="0" y="96" width="320" height="54" fill="#6fb24f"/>';
+  s += '<path d="M0 98 Q90 88 180 96 T320 94 L320 108 L0 108 Z" fill="#5aa043" opacity="0.6"/>';
+  s += miniCastle(286, snap.def.side, attWins);
+  // defenders hold in front of their castle (face left); attackers charge in from the left
+  s += lineUpBattle(snap.def, -1, 250, 205, "def", attWins);
+  s += lineUpBattle(snap.att, 1, 22, 110, "att", !attWins);
+  // clash spark at center
+  s += '<g transform="translate(168,80)"><g class="bspark"><circle r="15" fill="#fff2a8"/><circle r="8" fill="#ffffff"/></g></g>';
+  s += "</svg>";
+  return s;
+}
+
+function battleResultText(res) {
+  const broke = res.outcome !== "holdDef";
+  // solo: green when it's good for you; hotseat: green for a successful assault
+  const good = mode === "pvp" ? broke : ((res.attName === "You") === broke);
+  const t = res.outcome === "holdDef" ? res.defName + " hold the line!"
+    : res.outcome === "undefended" ? res.attName + " hit an open Base!  −" + res.dmg
+    : res.attName + " break through!  −" + res.dmg;
+  return { t, good };
+}
+
+function playBattle(snap, res, onDone) {
+  const ov = document.getElementById("battle-overlay");
+  document.getElementById("battle-stage").innerHTML = battleStageSVG(snap, res);
+  const title = document.getElementById("battle-title");
+  const sub = document.getElementById("battle-sub");
+  title.textContent = res.attName + " assault!";
+  title.className = "battle-title";
+  sub.textContent = res.outcome === "undefended"
+    ? "atk " + res.aStr + "  ·  undefended"
+    : "atk " + res.aStr + "   vs   def " + res.dStr;
+  ov.classList.add("show");
+
+  const rt = battleResultText(res);
+  let ended = false;
+  const reveal = () => { title.textContent = rt.t; title.className = "battle-title " + (rt.good ? "win" : "lose"); };
+  const t1 = setTimeout(reveal, 1150);
+  const finish = () => {
+    if (ended) return;
+    ended = true;
+    clearTimeout(t1); clearTimeout(t2);
+    reveal();
+    ov.classList.remove("show");
+    ov.onclick = null;
+    onDone();
+  };
+  const t2 = setTimeout(finish, 2200);
+  ov.onclick = finish;                      // click to skip / speed up
+}
+
+// ---- Turn flow ----
+function startTurn(side) {
+  const p = side === "you" ? you : enemy;
+  p.gold += p.eco;
+}
+
+function endTurn() {
+  if (checkEnd()) return;
+  const next = current === "you" ? "enemy" : "you";
+  if (next === "you") { turnNo++; if (checkEnd()) return; }
+  current = next;
+  startTurn(current);
+  if (mode === "pvp") {
+    // hotseat: lock the board and hand the device to the other human
+    busy = true;
+    render();
+    showHandoff(current);
+  } else if (current === "enemy") {
+    busy = true;
+    render();
+    document.getElementById("enemy-think").textContent = "Plotting...";
+    setTimeout(() => { render(); setTimeout(aiTurn, 650); }, 500);
+  } else {
+    busy = false;
+    document.getElementById("enemy-think").textContent = "Waiting for your move...";
+    render();
+  }
+}
+
+function checkEnd() {
+  if (enemy.hp <= 0) { showEnd(true); return true; }
+  if (you.hp <= 0) { showEnd(false); return true; }
+  return false;
+}
+
+function showEnd(youWon) {
+  busy = true;
+  render();
+  const modal = document.getElementById("modal");
+  let title, text, cls;
+  if (mode === "pvp") {
+    cls = "win";
+    title = (youWon ? "Player 1" : "Player 2") + " wins!";
+    text = "The " + (youWon ? "Player 2" : "Player 1") + " Base has fallen. Well fought.";
+  } else {
+    cls = youWon ? "win" : "lose";
+    title = youWon ? "VICTORY" : "DEFEAT";
+    text = youWon
+      ? "The enemy Base has fallen. The realm is yours, commander."
+      : "Your Base has been overrun. The enemy commander outplayed you this time.";
+  }
+  modal.className = "modal " + cls;
+  document.getElementById("modal-title").textContent = title;
+  document.getElementById("modal-text").textContent = text;
+  document.getElementById("overlay").classList.add("show");
+}
+
+function showHandoff(side) {
+  document.getElementById("handoff-title").textContent = sideName(side) + " — your turn";
+  document.getElementById("handoff-overlay").classList.add("show");
+}
+
+// ---- Player actions ---- (operate on whoever's turn it is)
+function playerAction(fn) {
+  if (busy || !isHumanTurn()) return;
+  fn();
+  render();
+  endTurn();
+}
+
+function doEco() {
+  const p = actor(), c = CFG.ecoCost(p.eco);
+  if (p.gold < c || p.eco >= CFG.ecoCap) return;
+  p.gold -= c; p.eco += 1;
+  log("invested in <span class='k-eco'>Economy</span> &rarr; income now +" + p.eco + "/turn.", current);
+}
+function doResearchAtk() {
+  const p = actor(), c = CFG.techCost(p.atkTech);
+  if (p.gold < c || p.atkTech + p.defTech >= CFG.techCap) return;
+  p.gold -= c; p.atkTech += 1;
+  log("researched <span class='k-tech'>Attack</span> &rarr; every troop now +" + p.atkTech + " attack.", current);
+}
+function doResearchDef() {
+  const p = actor(), c = CFG.techCost(p.defTech);
+  if (p.gold < c || p.atkTech + p.defTech >= CFG.techCap) return;
+  p.gold -= c; p.defTech += 1;
+  log("researched <span class='k-tech'>Defense</span> &rarr; every troop now +" + p.defTech + " defense.", current);
+}
+function doTrain() {
+  const p = actor(), type = selectedType, each = TROOPS[type].cost;
+  const n = Math.min(trainQty, maxTrainable(p, type));
+  if (n < 1) return;
+  p.gold -= n * each; p.units[type] += n;
+  log("trained <b>" + n + "</b> " + TROOPS[type].name + " (army " + totalTroops(p) + "/" + CFG.armyCap +
+      ", atk " + atkPower(p) + " / def " + defPower(p) + ").", current);
+}
+function requestAttack() {
+  const p = actor();
+  if (busy || !isHumanTurn() || !canAttack(p)) return;
+  busy = true;                                   // lock input through the clash
+  const foe = p === you ? enemy : you;
+  p.gold -= CFG.attackCost;
+  log("orders the assault! (&minus;" + CFG.attackCost + "g)", current);
+  performAttack(p, foe, sideName(current), sideName(p === you ? "enemy" : "you"), () => endTurn());
+}
+function doBoost() {
+  const p = actor();
+  if (p.boostUsed || p.gold < CFG.boostCost) return;
+  p.gold -= CFG.boostCost; p.boostUsed = true; p.boostStart = turnNo;
+  log("activated <span class='k-boost'>Battle Boost</span> &rarr; +" + Math.round((CFG.boostMult - 1) * 100) +
+      "% attack for the next " + CFG.boostDuration + " turns!", current);
+}
+function doSkip() {
+  log("holds position and banks the gold.", current);
+}
+
+// ---- AI ----
+// Trains a batch. A smart AI builds the unit that COUNTERS the player's main
+// force; otherwise it falls back to role-based picks (def = durable, off = attack).
+function aiTrain(me, role, D) {
+  const capLeft = CFG.armyCap - totalTroops(me);
+  if (capLeft <= 0 || me.gold < TROOPS.inf.cost) return null;
+  const foe = me === enemy ? you : enemy;
+  const foeMain = dominantType(foe);
+  let type;
+  if (Math.random() < D.smart && foeMain && totalTroops(foe) >= 2) {
+    type = COUNTER_OF[foeMain];                              // counter their main force
+    if (me.gold < TROOPS[type].cost) type = "inf";           // can't afford the counter -> cheap filler
+  } else if (role === "def") {
+    type = (me.gold >= TROOPS.kni.cost && Math.random() < 0.6) ? "kni" : "inf";
+  } else {
+    if (me.gold >= TROOPS.kni.cost && Math.random() < 0.4) type = "kni";
+    else type = Math.random() < 0.5 ? "arc" : "inf";
+  }
+  if (me.gold < TROOPS[type].cost) type = "inf";
+  const each = TROOPS[type].cost;
+  let n = Math.min(Math.floor(me.gold / each), capLeft);
+  if (turnNo <= 2) n = Math.min(n, 3);
+  n = Math.max(1, n);
+  if (n < 1 || me.gold < each) return null;
+  me.gold -= n * each; me.units[type] += n;
+  return { type, n };
+}
+
+function aiTurn() {
+  if (busy === false) return; // safety
+  const me = enemy, foe = you;
+  const D = AI_PARAMS[difficulty];
+  // matchup-aware: each value already accounts for the counter triangle
+  const myAtk = atkVs(me, foe), foeDef = defVs(foe, me);
+  const foeAtk = atkVs(foe, me), myDef = defVs(me, foe);
+  const myTotal = totalTroops(me), foeTotal = totalTroops(foe);
+  // read the player's posture to adapt
+  const foeGreedy = foeTotal === 0 && foe.eco >= me.eco && turnNo >= 2;       // hoarding economy, no army
+  const nearUnlock = turnNo >= CFG.attackUnlockTurn - 2;
+  const ecoCost = CFG.ecoCost(me.eco);
+  const atkResCost = CFG.techCost(me.atkTech);
+  const defResCost = CFG.techCost(me.defTech);
+  const ableToAttack = canAttack(me);
+  let decision = "";
+
+  // 1. Lethal: can I end it now?
+  if (ableToAttack) {
+    const dmg = foeDef === 0 ? myAtk : (myAtk > foeDef ? myAtk - foeDef : 0);
+    if (dmg >= foe.hp && (foeDef === 0 || myAtk > foeDef)) decision = "attack";
+  }
+
+  // 2. Profitable attack: press an edge. Impatience lowers the bar over time.
+  if (!decision && ableToAttack) {
+    const e = Math.max(D.minEdge, D.edge - turnNo * 0.02);
+    if (foeDef === 0 ? myAtk > 0 : (myAtk > foeDef * e && myAtk - foeDef >= D.minDiff)) decision = "attack";
+  }
+
+  // 2.5 Boost: spend it to punch through a wall we're stuck against, or to set up
+  //     a lethal blow — banking toward it if short. Only with a committed army,
+  //     when not under heavy threat, and when more research won't easily help.
+  if (!decision && !me.boostUsed && ableToAttack && myTotal >= 5 && foeAtk <= myDef + 4) {
+    const boosted = Math.floor(myAtk * CFG.boostMult);
+    const stalemated = foeDef > 0 && myAtk <= foeDef * 1.15;                 // can't profitably break now
+    const breakthrough = boosted - foeDef >= Math.max(D.minDiff, 4);         // boost yields solid overflow
+    const lethalWithBoost = (boosted - Math.max(0, foeDef)) >= foe.hp && (myAtk - Math.max(0, foeDef)) < foe.hp;
+    const researchTapped = me.atkTech >= D.techCap - 1 || myTotal >= 8;      // teching won't easily break it
+    if (((stalemated && breakthrough) || lethalWithBoost) && researchTapped) {
+      decision = me.gold >= CFG.boostCost ? "boost" : "save"; // bank toward the boost if short
+    }
+  }
+
+  // 3-4. Development. Three modes: ramp economy while attacks are locked, defend
+  //      when the opponent's attack can overflow us, otherwise grow then arm up.
+  if (!decision) {
+    const atCap = totalTroops(me) >= CFG.armyCap;
+    const safe = turnNo < CFG.attackUnlockTurn;                 // turns 1-3: nobody can attack
+    const techFull = me.atkTech + me.defTech >= CFG.techCap;
+    const canTechDef = myTotal >= 2 && me.defTech < D.techCap && !techFull && me.gold >= defResCost;
+    const canTechAtk = myTotal >= 2 && me.atkTech < D.techCap && !techFull && me.gold >= atkResCost;
+    const balanceTech = me.atkTech <= me.defTech ? "tech_atk" : "tech_def"; // research the lagging track
+    const behindOnDef = foeTotal > 0 && foeAtk > myDef;         // opponent could overflow my defense
+
+    if (safe) {
+      // while no one can attack: ramp economy — but if the player is skipping an
+      // army entirely, raise a strike force to punish their open base at unlock.
+      const wantEco = me.eco < 5;
+      if (foeGreedy && nearUnlock && !atCap && me.gold >= TROOPS.inf.cost && Math.random() < D.smart) decision = "train_off";
+      else if (wantEco && me.gold >= ecoCost) decision = "eco";
+      else if (wantEco) decision = "save";
+      else if (!atCap && me.gold >= TROOPS.inf.cost) decision = "train_off";
+      else decision = me.gold >= ecoCost ? "eco" : "save";
+    } else if (behindOnDef && Math.random() < D.defend) {
+      // pressured: research DEFENSE (multiplies whole-army def), or mass counter-units
+      if (canTechDef && Math.random() < 0.45) decision = "tech_def";
+      else if (!atCap && me.gold >= TROOPS.inf.cost) decision = "train_def";
+      else if (canTechDef) decision = "tech_def";
+      else if (me.gold >= ecoCost && me.eco < 7) decision = "eco";
+      else decision = "save";
+    } else if (foeGreedy && !atCap && me.gold >= TROOPS.inf.cost && Math.random() < D.smart) {
+      // player is turtling economy with no defense — build up and go punish it
+      decision = "train_off";
+    } else {
+      // comfortable: grow economy to a ceiling, then a researched standing army
+      const wantEco = me.eco < 5 && me.gold >= ecoCost;
+      const canTech = balanceTech === "tech_atk" ? canTechAtk : canTechDef;
+      if (wantEco) decision = "eco";
+      else if (canTech && Math.random() < D.techBias) decision = balanceTech;
+      else if (!atCap && me.gold >= TROOPS.inf.cost) decision = "train_off";
+      else if (me.gold >= ecoCost && me.eco < 7) decision = "eco";
+      else decision = "pass";
+    }
+  }
+
+  // Blunder (easy AI): sometimes throw away the plan for a random dev move.
+  if (Math.random() < D.mistake && decision !== "attack") {
+    const opts = [];
+    if (me.gold >= ecoCost) opts.push("eco");
+    if (me.gold >= TROOPS.inf.cost && totalTroops(me) < CFG.armyCap) opts.push("train_off");
+    if (me.gold >= CFG.techCost(me.atkTech) && totalTroops(me) > 0) opts.push("tech_atk");
+    if (me.gold >= CFG.techCost(me.defTech) && totalTroops(me) > 0) opts.push("tech_def");
+    opts.push("pass");
+    decision = opts[Math.floor(Math.random() * opts.length)];
+  }
+
+  // Hard caps: never pour a turn into a maxed track — redirect to army or banking.
+  const armyRoom = totalTroops(me) < CFG.armyCap;
+  if (decision === "eco" && me.eco >= CFG.ecoCap)
+    decision = (armyRoom && me.gold >= TROOPS.inf.cost) ? "train_off" : "save";
+  if ((decision === "tech_atk" || decision === "tech_def") && me.atkTech + me.defTech >= CFG.techCap)
+    decision = (armyRoom && me.gold >= TROOPS.inf.cost) ? "train_off" : "save";
+
+  // execute
+  let think = "";
+  switch (decision) {
+    case "attack":
+      me.gold -= CFG.attackCost;
+      log("launches an assault! (&minus;" + CFG.attackCost + "g)", "enemy");
+      document.getElementById("enemy-think").textContent = "Commits to an assault.";
+      performAttack(me, foe, "Enemy", "You", () => endTurn());
+      return;                                  // the battle animation drives render + endTurn
+    case "boost":
+      me.gold -= CFG.boostCost; me.boostUsed = true; me.boostStart = turnNo;
+      think = "Rallies a battle boost!";
+      log("activated <span class='k-boost'>Battle Boost</span> &rarr; +" + Math.round((CFG.boostMult - 1) * 100) +
+          "% attack for " + CFG.boostDuration + " turns!", "enemy");
+      break;
+    case "train_def":
+    case "train_off": {
+      const r = aiTrain(me, decision === "train_def" ? "def" : "off", D);
+      if (r) {
+        think = "Trains " + r.n + " " + TROOPS[r.type].name + ".";
+        log("trained <b>" + r.n + "</b> " + TROOPS[r.type].name + " (army " + totalTroops(me) + "/" + CFG.armyCap +
+            ", atk " + atkPower(me) + " / def " + defPower(me) + ").", "enemy");
+      } else { think = "Holds and saves gold."; log("holds and saves gold.", "enemy"); }
+      break;
+    }
+    case "eco":
+      me.gold -= ecoCost; me.eco += 1;
+      think = "Expands its economy.";
+      log("invested in <span class='k-eco'>Economy</span> &rarr; income now +" + me.eco + "/turn.", "enemy");
+      break;
+    case "tech_atk":
+      me.gold -= atkResCost; me.atkTech += 1;
+      think = "Researches attack.";
+      log("researched <span class='k-tech'>Attack</span> &rarr; troops now +" + me.atkTech + " attack.", "enemy");
+      break;
+    case "tech_def":
+      me.gold -= defResCost; me.defTech += 1;
+      think = "Researches defense.";
+      log("researched <span class='k-tech'>Defense</span> &rarr; troops now +" + me.defTech + " defense.", "enemy");
+      break;
+    case "save":
+      think = "Banks gold for its economy.";
+      log("banks gold, building toward an economy upgrade.", "enemy");
+      break;
+    default:
+      think = "Holds position, saving gold.";
+      log("holds and saves gold.", "enemy");
+  }
+  document.getElementById("enemy-think").textContent = think;
+
+  render();
+  endTurn();
+}
+
+// ---- Wiring ----
+document.getElementById("btn-eco").addEventListener("click", () => playerAction(doEco));
+document.getElementById("btn-ratk").addEventListener("click", () => playerAction(doResearchAtk));
+document.getElementById("btn-rdef").addEventListener("click", () => playerAction(doResearchDef));
+document.getElementById("btn-attack").addEventListener("click", requestAttack);
+document.getElementById("btn-boost").addEventListener("click", () => playerAction(doBoost));
+document.getElementById("btn-skip").addEventListener("click", () => playerAction(doSkip));
+// Train only commits via its dedicated button — clicking the setup tile does nothing.
+document.getElementById("btn-train").addEventListener("click", () => playerAction(doTrain));
+document.getElementById("t-plus").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (busy || !isHumanTurn()) return;
+  trainQty = Math.min(Math.max(1, maxTrainable(actor(), selectedType)), trainQty + 1);
+  render();
+});
+document.getElementById("t-minus").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (busy || !isHumanTurn()) return;
+  trainQty = Math.max(1, trainQty - 1);
+  render();
+});
+for (const ty of TYPES) {
+  document.getElementById("ty-" + ty).addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (busy || !isHumanTurn()) return;
+    selectedType = ty;
+    trainQty = 1;
+    render();
+  });
+}
+for (const d of ["easy", "normal", "hard"]) {
+  document.getElementById("diff-" + d).addEventListener("click", () => {
+    if (difficulty === d) return;
+    difficulty = d;
+    for (const x of ["easy", "normal", "hard"]) document.getElementById("diff-" + x).classList.toggle("on", x === d);
+    reset();
+  });
+}
+// Mode: solo vs AI, or local 2-player hotseat
+for (const m of ["ai", "pvp"]) {
+  document.getElementById("mode-" + m).addEventListener("click", () => {
+    if (mode === m) return;
+    mode = m;
+    reset();
+  });
+}
+// Hotseat hand-off: reveal the board to the next player only when they're ready
+document.getElementById("handoff-ready").addEventListener("click", () => {
+  document.getElementById("handoff-overlay").classList.remove("show");
+  trainQty = 1;
+  busy = false;
+  render();
+});
+document.getElementById("restart").addEventListener("click", reset);
+
+reset();
+</script>
+</body>
+</html>
